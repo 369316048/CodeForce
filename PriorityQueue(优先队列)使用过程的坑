@@ -1,0 +1,70 @@
+PriorityQueue(优先队列)使用过程的坑
+
+# 1.问题是什么？
+现在有一个String类型的数组，我们需要按照每个字符串的长度按照从大到小对数组进行排序。例如“Leetcode”,“is”,“cool”,显然，结果是“LeetCode”“cool”“is”。
+ 最简洁的思路则是利用PriorityQueue，并重写comparator接口来完成排序。代码如下：
+```java
+        String[] arr = text.split(" ");
+        PriorityQueue<String> pq = new PriorityQueue<>(
+                new Comparator<String>() {
+                    @Override
+                    public int compare(String o1, String o2) {
+                        return o1.length()-o2.length();
+                    }
+                }
+        );
+        int i = 0;
+        for(String s: arr){
+            pq.add(s);
+        }
+```
+那么问题的关键来了，如何取出队列中的元素，正常的代码应该是这样的：
+
+```java
+	List<String> res = new LinkedList<>();
+	while(pq.size()>0){
+		String s = pq.poll();
+		res.add(s);
+	}
+```
+通过这样一段代码呢，我们可以逐步将队列中的每个元素取出，并最终得到我们想要的顺序，但是我们突发奇想，如果利用foreach语句来取出元素会是什么效果呢？既代码如下:
+
+```java
+	for(String s:pq){
+		res.add(s);
+	}
+```
+
+我想恐怕很多人会认为，这两个答案有什么不一样的呢，那么不妨来看看编译器给出的结果吧：
+
+```java
+   res：Leetcode is cool
+```
+这个恐怕令人大吃一惊同样的数据结构，仅仅是取出的方式不同，为什么原本有序的结果仿佛就没有排序过了一样。
+#  2.	为什么PriorityQueue中的数据并未有序
+要说明这个问题，首先就要知道PriorityQueue是**有序的二叉堆**（根据堆有序的概念，这意味着每个节点都必须必他的两个子节点要大），但是呢，我们在实现的过程之中却是利用**数组**来进行的存储，这个可以在PriorityQueue的源码得以体现：
+
+```java
+transient Object[] queue; // non-private to simplify nested class access
+```
+那么我们对问题里的情况进行分析，当我们把Leetcode is cool 三个字符串全部输入以后，按照堆有序的规则画出二叉堆时候，是不是就应当LeetCode作为堆顶，而is cool分别作为其子节点。由于数组的第一个代表堆顶，所以在存储时，LeetCode应该是数组第一个，而is 和cool分别是第二个第三个，所以在foreach按照顺序去取出元素时，得出了刚才的结论。
+。如果继续添加元素，例如，but，由于but长度比堆顶is长，比cool短，则应该更新为cool的子节点，顺序存储结构应该是LeetCode is cool but。
+那么为什么正常poll的结果却可以得出正确的结果呢，是因为PriorityQueue在每次调用poll后，都重新对堆进行了有序化的操作，可以在poll的源码之中得到体现：
+
+```java
+    public E poll() {
+        if (size == 0)
+            return null;
+        int s = --size;
+        modCount++;
+        E result = (E) queue[0];
+        E x = (E) queue[s];
+        queue[s] = null;
+        if (s != 0)
+            siftDown(0, x);
+        return result;
+    }
+```
+其中的siftDown则是这部分代码。
+# 3.	正确使用PriorityQueue和comparator
+从上面的经验来看， PriorityQueue在使用过程之中的序列化数组并非有序的，所以要从PriorityQueue之中正确取出元素，一定要使用poll方法逐次取出。
